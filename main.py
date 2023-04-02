@@ -1,3 +1,14 @@
+"""
+Main Script of the NYC shor term rental prices ml pipeline 
+
+How to run a release:
+
+mlflow run https://github.com/abimael-dominguez/build-ml-pipeline-for-short-term-rental-prices \
+             -v 1.0.1 \
+             -P hydra_options="etl.sample='sample2.csv'"
+
+"""
+
 import json
 
 import mlflow
