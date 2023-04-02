@@ -6,9 +6,11 @@ import argparse
 import logging
 import os
 import shutil
+import tempfile
 import matplotlib.pyplot as plt
 
 import mlflow
+from mlflow.models import infer_signature
 import json
 
 import pandas as pd
@@ -54,10 +56,11 @@ def go(args):
     ######################################
     # Use run.use_artifact(...).file() to get the train and validation artifact (args.trainval_artifact)
     # and save the returned path in train_local_pat
-    trainval_local_path = # YOUR CODE HERE
+    # YOUR CODE HERE
+    trainval_local_path = run.use_artifact(args.trainval_artifact).file()
     ######################################
 
-    X = pd.read_csv(trainval_local_path)
+    X = pd.read_csv(trainval_local_path, low_memory=False)
     y = X.pop("price")  # this removes the column "price" from X and puts it into y
 
     logger.info(f"Minimum price: {y.min()}, Maximum price: {y.max()}")
@@ -78,11 +81,13 @@ def go(args):
     # YOUR CODE HERE
     ######################################
 
+    sk_pipe.fit(X_train[processed_features], y_train)
+
     # Compute r2 and MAE
     logger.info("Scoring")
-    r_squared = sk_pipe.score(X_val, y_val)
+    r_squared = sk_pipe.score(X_val[processed_features], y_val)
 
-    y_pred = sk_pipe.predict(X_val)
+    y_pred = sk_pipe.predict(X_val[processed_features])
     mae = mean_absolute_error(y_val, y_pred)
 
     logger.info(f"Score: {r_squared}")
@@ -100,13 +105,40 @@ def go(args):
     # YOUR CODE HERE
     ######################################
 
-    ######################################
-    # Upload the model we just exported to W&B
-    # HINT: use wandb.Artifact to create an artifact. Use args.output_artifact as artifact name, "model_export" as
-    # type, provide a description and add rf_config as metadata. Then, use the .add_dir method of the artifact instance
-    # you just created to add the "random_forest_dir" directory to the artifact, and finally use
-    # run.log_artifact to log the artifact to the run
-    # YOUR CODE HERE
+    signature = infer_signature(X_val[processed_features], y_pred)
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+
+        export_path = os.path.join(temp_dir, "random_forest_dir")
+
+        mlflow.sklearn.save_model(
+            sk_pipe,
+            export_path,
+            serialization_format=mlflow.sklearn.SERIALIZATION_FORMAT_CLOUDPICKLE,
+            signature=signature,
+            input_example=X_val.iloc[:2],
+        )
+
+        ######################################
+        # Upload the model we just exported to W&B
+        # HINT: use wandb.Artifact to create an artifact. Use args.output_artifact as artifact name, "model_export" as
+        # type, provide a description and add rf_config as metadata. Then, use the .add_dir method of the artifact instance
+        # you just created to add the "random_forest_dir" directory to the artifact, and finally use
+        # run.log_artifact to log the artifact to the run
+        # YOUR CODE HERE
+        artifact = wandb.Artifact(
+            name=args.output_artifact,
+            metadata=rf_config,
+            type="model_export",
+            description="Random Forest pipeline export",
+        )
+        artifact.add_dir(export_path)
+
+        run.log_artifact(artifact)
+
+        # Make sure the artifact is uploaded before the temp dir
+        # gets deleted
+        artifact.wait()
     ######################################
 
     # Plot feature importance
@@ -117,6 +149,19 @@ def go(args):
     run.summary['r2'] = r_squared
     # Now log the variable "mae" under the key "mae".
     # YOUR CODE HERE
+    """
+    Note: Both run.log() and run.summary are used for logging and tracking metrics
+    and artifacts in an MLFlow run, but they have slightly different purposes.
+    
+    - run.log() is used to log metrics and artifacts,
+    and it can be called multiple times during a single run to record changes in metrics over time. 
+
+    - run.summary is used to log a summary of metrics and artifacts at the end of a run, 
+    and it's typically used to record the final values of metrics.
+    """
+
+    run.log({'mae': mae})
+
     ######################################
 
     # Upload to W&B the feture importance visualization
@@ -158,7 +203,10 @@ def get_inference_pipeline(rf_config, max_tfidf_features):
     # Build a pipeline with two steps:
     # 1 - A SimpleImputer(strategy="most_frequent") to impute missing values
     # 2 - A OneHotEncoder() step to encode the variable
-    non_ordinal_categorical_preproc = # YOUR CODE HERE
+    # YOUR CODE HERE
+    
+    non_ordinal_categorical_preproc = make_pipeline(
+        SimpleImputer(strategy="most_frequent"), OneHotEncoder())
     ######################################
 
     # Let's impute the numerical columns to make sure we can handle missing values
@@ -172,6 +220,7 @@ def get_inference_pipeline(rf_config, max_tfidf_features):
         "longitude",
         "latitude"
     ]
+
     zero_imputer = SimpleImputer(strategy="constant", fill_value=0)
 
     # A MINIMAL FEATURE ENGINEERING step:
@@ -204,10 +253,11 @@ def get_inference_pipeline(rf_config, max_tfidf_features):
             ("transform_date", date_imputer, ["last_review"]),
             ("transform_name", name_tfidf, ["name"])
         ],
-        remainder="drop",  # This drops the columns that we do not transform
+        remainder="drop",  # This drops the columns that we do not transform !!!
     )
 
     processed_features = ordinal_categorical + non_ordinal_categorical + zero_imputed + ["last_review", "name"]
+    logger.info("Length of processed_features: %d", len(processed_features))
 
     # Create random forest
     random_Forest = RandomForestRegressor(**rf_config)
@@ -217,7 +267,8 @@ def get_inference_pipeline(rf_config, max_tfidf_features):
     # ColumnTransformer instance that we saved in the `preprocessor` variable, and a step called "random_forest"
     # with the random forest instance that we just saved in the `random_forest` variable.
     # HINT: Use the explicit Pipeline constructor so you can assign the names to the steps, do not use make_pipeline
-    sk_pipe = # YOUR CODE HERE
+    # YOUR CODE HERE
+    sk_pipe = Pipeline(steps=[('preprocessor', preprocessor), ('random_forest', random_Forest)])
 
     return sk_pipe, processed_features
 

@@ -29,9 +29,24 @@ def go(args):
     # Download test dataset
     test_dataset_path = run.use_artifact(args.test_dataset).file()
 
+    ordinal_categorical = ["room_type"]
+    non_ordinal_categorical = ["neighbourhood_group"]
+    zero_imputed = [
+    "minimum_nights",
+    "number_of_reviews",
+    "reviews_per_month",
+    "calculated_host_listings_count",
+    "availability_365",
+    "longitude",
+    "latitude"
+    ]
+
+    processed_features = ordinal_categorical + non_ordinal_categorical + zero_imputed + ["last_review", "name"]
+
     # Read test dataset
     X_test = pd.read_csv(test_dataset_path)
     y_test = X_test.pop("price")
+    X_test = X_test[processed_features]
 
     logger.info("Loading model and performing inference on test set")
     sk_pipe = mlflow.sklearn.load_model(model_local_path)
@@ -48,6 +63,10 @@ def go(args):
     # Log MAE and r2
     run.summary['r2'] = r_squared
     run.summary['mae'] = mae
+
+    run.log({
+        'mae': mae,
+        'r2': r_squared})
 
 
 if __name__ == "__main__":
