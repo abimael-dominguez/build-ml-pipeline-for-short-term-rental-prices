@@ -6,7 +6,7 @@ to be retrained with the same cadence, necessitating an end-to-end pipeline that
 
 In this project you will build such a pipeline.
 
-# Ropository to the solution:
+# Repository to the solution:
 https://github.com/abimael-dominguez/build-ml-pipeline-for-short-term-rental-prices 
 
 # How to run a release of the solved project:
