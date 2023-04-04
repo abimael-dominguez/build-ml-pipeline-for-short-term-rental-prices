@@ -1,3 +1,10 @@
+"""
+Testing functions
+
+Run command:
+    mlflow run . -P steps="data_check"
+"""
+
 import pandas as pd
 import numpy as np
 import scipy.stats
@@ -31,6 +38,10 @@ def test_column_names(data):
 
 
 def test_neighborhood_names(data):
+    """
+    Check wether we have the same unique categories in 
+    the "neighbourhood_group" column or not.
+    """
 
     known_names = ["Bronx", "Brooklyn", "Manhattan", "Queens", "Staten Island"]
 
@@ -65,7 +76,23 @@ def test_similar_neigh_distrib(data: pd.DataFrame, ref_data: pd.DataFrame, kl_th
 ########################################################
 
 def test_row_count(data):
+    """
+    Checks if the number of rows in the data falls within the range of 15000 and 1000000.
+
+    Args:
+        data (pandas.DataFrame): Input data containing rows to be tested.
+
+    """
     assert 15000 < data.shape[0] < 1000000
 
 def test_price_range(data, min_price, max_price):
+    """
+    Checks if the price values in the data fall within the given range of min_price and max_price.
+
+    Args:
+        data (pandas.DataFrame): Input data containing the dataset.
+        min_price (float): The minimum price value in the range.
+        max_price (float): The maximum price value in the range.
+
+    """
     assert data['price'].between(min_price, max_price).all()
